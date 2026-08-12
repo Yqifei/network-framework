@@ -1,0 +1,9 @@
+/out/
+/build/
+.vs/
+CMakeSettings.json
+CMakeUserPresets.json
+*.user
+CLAUDE.md
+.claude/
+docs/
