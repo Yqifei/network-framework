@@ -7,7 +7,7 @@ project(network-framework
 
 option(NF_BUILD_TESTS "Build unit tests" ON)
 
-find_package(Qt5 5.15 REQUIRED COMPONENTS Core)
+find_package(Qt5 5.15 REQUIRED COMPONENTS Core Network)
 if(NF_BUILD_TESTS)
     find_package(Qt5 5.15 REQUIRED COMPONENTS Test)
 endif()
@@ -16,19 +16,24 @@ add_subdirectory(third_party/qtpromise)
 
 set(CMAKE_AUTOMOC ON)
 
-add_library(nf
-    src/version.cpp)
-add_library(nf::nf ALIAS nf)
+add_library(NetworkLib
+    src/core/Version.cpp)
+add_library(NetCore::NetworkLib ALIAS NetworkLib)
 
-target_include_directories(nf PUBLIC
+target_include_directories(NetworkLib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-target_compile_features(nf PUBLIC cxx_std_17)
-target_link_libraries(nf PUBLIC Qt5::Core qtpromise::qtpromise)
+target_compile_features(NetworkLib PUBLIC cxx_std_17)
+target_compile_definitions(NetworkLib PUBLIC NETWORK_STATIC)
+target_link_libraries(NetworkLib PUBLIC Qt5::Core Qt5::Network qtpromise::qtpromise)
+
+if(MSVC)
+    target_compile_options(NetworkLib PUBLIC /utf-8)
+endif()
+
+add_subdirectory(examples)
 
 if(NF_BUILD_TESTS)
     enable_testing()
-    add_executable(tst_smoke tests/tst_smoke.cpp)
-    target_link_libraries(tst_smoke PRIVATE nf::nf Qt5::Test)
-    add_test(NAME tst_smoke COMMAND tst_smoke)
+    add_subdirectory(tests)
 endif()
