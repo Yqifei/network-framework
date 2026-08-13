@@ -21,7 +21,7 @@ ctest --test-dir out/build -C Debug --output-on-failure
 
 ## 规划
 
-- [ ] JSON 自动序列化
+- [x] JSON 自动序列化
 - [ ] 编译期请求声明
 - [ ] Promise 异步请求
 - [ ] 拦截器链

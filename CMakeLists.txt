@@ -17,7 +17,10 @@ add_subdirectory(third_party/qtpromise)
 set(CMAKE_AUTOMOC ON)
 
 add_library(NetworkLib
-    src/core/Version.cpp)
+    include/serializer/JsonSerializer.h
+    src/core/Version.cpp
+    src/serializer/SerializerException.cpp
+    src/serializer/JsonSerializer.cpp)
 add_library(NetCore::NetworkLib ALIAS NetworkLib)
 
 target_include_directories(NetworkLib PUBLIC
