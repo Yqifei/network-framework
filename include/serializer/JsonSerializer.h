@@ -9,6 +9,7 @@
 #include <QMetaType>
 #include <QObject>
 #include <QVariant>
+#include <memory>
 #include <type_traits>
 
 #include <core/global.h>
@@ -100,9 +101,10 @@ public:
         internal::QtReflectionCheck<T> check;
         Q_UNUSED(check)
 
-        T *instance = new T(parent);
-        deserializeInternal(object, &T::staticMetaObject, instance);
-        return instance;
+        // 异常安全：填充失败自动释放，成功后把所有权交给调用方
+        std::unique_ptr<T> instance(new T(parent));
+        deserializeInternal(object, &T::staticMetaObject, instance.get());
+        return instance.release();
     }
 
     template <typename T, typename std::enable_if_t<!std::is_base_of_v<QObject, T>, int> = 0>

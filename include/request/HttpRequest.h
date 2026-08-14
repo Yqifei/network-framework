@@ -5,38 +5,38 @@
 #include "HttpRequest.h"
 #include "HttpRequest.h"
 
-namespace NetCore{
+namespace NetCore {
 
-template <char... Cs>
-struct StrLiteral
-{
-	static constexpr char kData[] = {Cs...,'\0'};
-	static constexpr const char* c_str() { return kData; }
-	static constexpr std::string_view view()
+	template <char... Cs>
+	struct StrLiteral
 	{
-		return {
-			kData, sizeof...(Cs)
-		};
-	}
-};
+		static constexpr char kData[] = { Cs...,'\0' };
+		static constexpr const char* c_str() { return kData; }
+		static constexpr std::string_view view()
+		{
+			return {
+				kData, sizeof...(Cs)
+			};
+		}
+	};
 
-template <typename Acc,char...CArgs>
-struct BuildStr
-{
-	using type = Acc;
-};
+	template <typename Acc, char...CArgs>
+	struct BuildStr
+	{
+		using type = Acc;
+	};
 
-template <char... Acc,char C, char...Rest>
-struct BuildStr<StrLiteral<Acc...>,C,Rest...>
-	:BuildStr<StrLiteral<Acc...,C>,Rest...>
-{
-};
+	template <char... Acc, char C, char...Rest>
+	struct BuildStr<StrLiteral<Acc...>, C, Rest...>
+		:BuildStr<StrLiteral<Acc..., C>, Rest...>
+	{
+	};
 
-template<char...Acc,char...Rest>
-struct BuildStr<StrLiteral<Acc...>,'\0',Rest...>
-{
-	using  type = StrLiteral<Acc...>;
-};
+	template<char...Acc, char...Rest>
+	struct BuildStr<StrLiteral<Acc...>, '\0', Rest...>
+	{
+		using  type = StrLiteral<Acc...>;
+	};
 
 
 #define _C(s, i) (sizeof(s) > (i) ? s[i] : '\0')

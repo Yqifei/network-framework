@@ -60,6 +60,7 @@ class Person : public QObject
     Q_PROPERTY(QList<Address> addresses READ addresses WRITE setAddresses)
     Q_PROPERTY(QVector<int> scores READ scores WRITE setScores)
     Q_PROPERTY(QStringList tags READ tags WRITE setTags)
+    Q_PROPERTY(Person *mentor READ mentor WRITE setMentor)
 
 public:
     enum Status { Offline, Online };
@@ -83,6 +84,8 @@ public:
     void setScores(const QVector<int> &scores) { m_scores = scores; }
     QStringList tags() const { return m_tags; }
     void setTags(const QStringList &tags) { m_tags = tags; }
+    Person *mentor() const { return m_mentor; }
+    void setMentor(Person *mentor) { m_mentor = mentor; }
 
 private:
     QString m_name;
@@ -93,13 +96,14 @@ private:
     QList<Address> m_addresses;
     QVector<int> m_scores;
     QStringList m_tags;
+    Person *m_mentor = nullptr;
 };
 
 // Person 的 Q_GADGET 镜像，用于按值反序列化测试
 class PersonDto
 {
     Q_GADGET
-    Q_PROPERTY(QString name READ name WRITE setName)
+    Q_PROPERTY(QString name READ name WRITE setName REQUIRED)
     Q_PROPERTY(int age READ age WRITE setAge)
     Q_PROPERTY(bool active READ active WRITE setActive)
     Q_PROPERTY(Status status READ status WRITE setStatus)
@@ -158,6 +162,8 @@ private slots:
     void unknownFieldDefaultIgnored();
     void invalidJsonThrows();
     void whatNotDangling();
+    void nestedQObjectPointer();
+    void validationRequiredOnly();
 
 private:
     template <typename T>
@@ -345,6 +351,57 @@ void TestJsonSerializer::whatNotDangling()
     } catch (const NetCore::DeserializerException &error) {
         QCOMPARE(QByteArray(error.what()), message);
     }
+}
+
+void TestJsonSerializer::nestedQObjectPointer()
+{
+    NetCore::JsonSerializer serializer;
+
+    Person mentor;
+    mentor.setName("Mentor");
+    mentor.setAge(50);
+
+    Person person;
+    fill(&person);
+    person.setMentor(&mentor);
+
+    // 序列化：嵌套 QObject* 走多态 metaObject，不再是野指针
+    const QByteArray bytes = serializer.serializeToBytes(person);
+    const QJsonDocument document = QJsonDocument::fromJson(bytes);
+    const QJsonObject mentorJson = document.object().value("mentor").toObject();
+    QCOMPARE(mentorJson.value("name").toString(), QStringLiteral("Mentor"));
+    QCOMPARE(mentorJson.value("age").toInt(), 50);
+
+    // 反序列化：JSON null 对应空指针，不再崩溃
+    const QByteArray bytesWithNull = R"({"name":"Bob","age":20,"active":false,"status":0,"mentor":null,)"
+        R"("address":{"city":"X","street":"","zipCode":"","location":{"lat":0,"lng":0}},)"
+        R"("addresses":[],"scores":[],"tags":[]})";
+    Person *restored = serializer.deserializeFromBytes<Person>(bytesWithNull);
+    QVERIFY(restored != nullptr);
+    QVERIFY(restored->mentor() == nullptr);
+    QCOMPARE(restored->name(), QStringLiteral("Bob"));
+    delete restored;
+}
+
+void TestJsonSerializer::validationRequiredOnly()
+{
+    NetCore::JsonSerializer serializer;
+    serializer.setFlags(NetCore::ValidationEnabled | NetCore::IgnoreUnknownKeys);
+
+    // name 标记了 REQUIRED：缺失必须报错
+    const QByteArray missingName = R"({"age":20,"active":false,"status":0,)"
+        R"("address":{"city":"X","street":"","zipCode":"","location":{"lat":0,"lng":0}},)"
+        R"("addresses":[],"scores":[],"tags":[]})";
+    QVERIFY_EXCEPTION_THROWN(serializer.deserializeFromBytes<PersonDto>(missingName),
+                             NetCore::DeserializerException);
+
+    // age 不是 REQUIRED：缺失保持默认值，不报错
+    const QByteArray missingAge = R"({"name":"Bob","active":false,"status":0,)"
+        R"("address":{"city":"X","street":"","zipCode":"","location":{"lat":0,"lng":0}},)"
+        R"("addresses":[],"scores":[],"tags":[]})";
+    PersonDto restored = serializer.deserializeFromBytes<PersonDto>(missingAge);
+    QCOMPARE(restored.name(), QStringLiteral("Bob"));
+    QCOMPARE(restored.age(), 0);
 }
 
 QTEST_GUILESS_MAIN(TestJsonSerializer)
