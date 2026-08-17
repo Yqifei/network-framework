@@ -35,6 +35,31 @@ static_assert(std::is_same_v<NetCore::ValueTypeOf<NetCore::TypeModel<MyStruct>>:
 static_assert(NetCore::NoKeyStr::view().empty(), "NoKeyStr view must be empty");
 static_assert(NetCore::NoKeyStr::c_str()[0] == '\0', "NoKeyStr c_str must be empty");
 
+// ---- 阶段 3.2：HttpRequestParam ----
+
+using IdParam = NetCore::Path<STR("id"), NetCore::TypeInt>;
+
+static_assert(std::is_same_v<IdParam::tag, NetCore::PathTag>,
+	"Path tag must be PathTag");
+static_assert(std::is_same_v<IdParam::key, STR("id")>,
+	"Path key must be the compile-time string type");
+static_assert(std::is_same_v<IdParam::value_type, int64_t>,
+	"TypeInt must map to int64_t");
+static_assert(IdParam::key_view == "id", "key_view must equal the string");
+static_assert(IdParam::key_cstr[0] == 'i', "key_cstr must point at the string");
+
+using PageParam = NetCore::Query<STR("page")>;
+static_assert(std::is_same_v<PageParam::value_type, std::string_view>,
+	"default value tag must be TypeString");
+
+using RawBody = NetCore::Body<NetCore::TypeBinary>;
+static_assert(std::is_same_v<RawBody::tag, NetCore::BodyTag>,
+	"Body tag must be BodyTag");
+static_assert(std::is_same_v<RawBody::key, NetCore::NoKeyStr>,
+	"Body key must be NoKeyStr");
+static_assert(std::is_same_v<RawBody::value_type, QByteArray>,
+	"TypeBinary must map to QByteArray");
+
 class TestHttpRequest : public QObject
 {
 	Q_OBJECT

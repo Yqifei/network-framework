@@ -144,4 +144,31 @@ namespace NetCore {
 		static constexpr const char* c_str() { return ""; }
 	};
 
+	template <typename Tag, typename KeyStr, typename ValueType = TypeString>
+	struct HttpRequestParam {
+		using tag = Tag;
+		using key = KeyStr;
+		using value_tag = ValueType;
+		using value_type = typename ValueTypeOf<ValueType>::type;
+
+		static constexpr std::string_view key_view = KeyStr::view();
+		static constexpr const char* key_cstr = KeyStr::c_str();
+	};
+
+	// ---------- 便捷别名 ----------
+	template <typename KeyStr, typename ValueType = TypeString>
+	using Path = HttpRequestParam<PathTag, KeyStr, ValueType>;
+
+	template <typename KeyStr, typename ValueType = TypeString>
+	using Query = HttpRequestParam<QueryTag, KeyStr, ValueType>;
+
+	template <typename KeyStr, typename ValueType = TypeString>
+	using Form = HttpRequestParam<FormTag, KeyStr, ValueType>;
+
+	template <typename KeyStr, typename ValueType = TypeString>
+	using Header = HttpRequestParam<HeaderTag, KeyStr, ValueType>;
+
+	// Body 无键名，KeyStr 固定为 NoKeyStr 占位
+	template <typename ValueType>
+	using Body = HttpRequestParam<BodyTag, NoKeyStr, ValueType>;
 }
