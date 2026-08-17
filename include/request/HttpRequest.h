@@ -1,8 +1,13 @@
 #pragma once
 
+#include <QByteArray>
+#include <QHash>
+#include <QJsonObject>
+#include <QString>
 #include <string_view>
-
-#include "HttpRequest.h"
+#include <tuple>
+#include <type_traits>
+#include <utility>
 
 namespace NetCore {
 
@@ -171,4 +176,180 @@ namespace NetCore {
 	// Body 无键名，KeyStr 固定为 NoKeyStr 占位
 	template <typename ValueType>
 	using Body = HttpRequestParam<BodyTag, NoKeyStr, ValueType>;
+
+	// ---------- 参数分类 Trait ----------
+	template <typename T>
+	struct IsPathParam : std::false_type {};
+
+	template <typename S, typename V>
+	struct IsPathParam<Path<S, V>> : std::true_type {};
+
+	template <typename T>
+	struct IsQueryParam : std::false_type {};
+
+	template <typename S, typename V>
+	struct IsQueryParam<Query<S, V>> : std::true_type {};
+
+	template <typename T>
+	struct IsFormParam : std::false_type {};
+
+	template <typename S, typename V>
+	struct IsFormParam<Form<S, V>> : std::true_type {};
+
+	template <typename T>
+	struct IsHeaderParam : std::false_type {};
+
+	template <typename S, typename V>
+	struct IsHeaderParam<Header<S, V>> : std::true_type {};
+
+	template <typename V>
+	struct IsBodyParam : std::false_type {};
+
+	template <typename V>
+	struct IsBodyParam<Body<V>> : std::true_type {};
+
+	// ----------编译期参数过滤----------
+	template <typename Tag, typename Accumulated, typename... Params>
+	struct FilterParamsImpl {
+		using type = Accumulated;
+	};
+
+	template <typename Tag, typename... Acc, typename P, typename... Rest>
+	struct FilterParamsImpl<Tag, std::tuple<Acc...>, P, Rest...> {
+		using type = typename std::conditional_t<
+			std::is_same_v<typename P::tag, Tag>,
+			FilterParamsImpl<Tag, std::tuple<Acc..., P>, Rest...>,
+			FilterParamsImpl<Tag, std::tuple<Acc...>, Rest...>
+		>::type;
+	};
+
+	template <typename Tag, typename... Params>
+	using FilterHttpRequestParams = FilterParamsImpl<Tag, std::tuple<>, Params...>;
+
+
+	template <typename Param>
+	struct HttpRequestParamValue {
+		using value_type = typename Param::value_type;
+		static constexpr std::string_view key = Param::key_view;
+		value_type value{};
+	};
+
+	template <typename... Params>
+	struct HttpRequestParamValueList {
+		std::tuple<HttpRequestParamValue<Params>...> values;
+
+		template <typename Param>
+		void set(typename Param::value_type val)
+		{
+			std::get<HttpRequestParamValue<Param>>(values).value = std::move(val);
+		}
+
+		template <typename Param>
+		const typename Param::value_type& get() const
+		{
+			return std::get<HttpRequestParamValue<Param>>(values).value;
+		}
+	};
+
+	template <typename Tuple>
+	struct MakeValueList {
+		using type = HttpRequestParamValueList<>;
+	};
+
+	template <typename... Ps>
+	struct MakeValueList<std::tuple<Ps...>> {
+		using type = HttpRequestParamValueList<Ps...>;
+	};
+
+	namespace detail {
+
+		template <typename Instance, typename Param, typename Value>
+		void fillHttpRequestParamValue(Instance& inst, Value&& val)
+		{
+			using Tag = typename Param::tag;
+			if constexpr (std::is_same_v<Tag, PathTag>) {
+				inst.path.template set<Param>(std::forward<Value>(val));
+			}
+			else if constexpr (std::is_same_v<Tag, QueryTag>) {
+				inst.query.template set<Param>(std::forward<Value>(val));
+			}
+			else if constexpr (std::is_same_v<Tag, FormTag>) {
+				inst.form.template set<Param>(std::forward<Value>(val));
+			}
+			else if constexpr (std::is_same_v<Tag, HeaderTag>) {
+				inst.headers.template set<Param>(std::forward<Value>(val));
+			}
+			else if constexpr (std::is_same_v<Tag, BodyTag>) {
+				inst.body.template set<Param>(std::forward<Value>(val));
+			}
+		}
+
+		template <typename Instance, typename ParamsTuple, typename ValuesTuple, size_t... Is>
+		void fillAll(Instance& inst, ValuesTuple&& vals, std::index_sequence<Is...>)
+		{
+			(fillHttpRequestParamValue<Instance, std::tuple_element_t<Is, ParamsTuple>>(
+				inst, std::get<Is>(std::forward<ValuesTuple>(vals))),
+				...);
+		}
+
+	} // namespace detail
+
+	template <typename T, typename = void>
+	struct IsHttpRequest : std::false_type {};
+
+	template <typename T>
+	struct IsHttpRequest<T, std::void_t<decltype(T::method)>> : std::true_type {};
+
+	template <typename T>
+	constexpr bool is_http_request_v = IsHttpRequest<T>::value;
+
+	template <typename RequestMeta,
+		typename std::enable_if_t<is_http_request_v<RequestMeta>, int> = 0>
+	struct HttpRequestInstance {
+		typename MakeValueList<typename RequestMeta::path_params>::type path;
+		typename MakeValueList<typename RequestMeta::query_params>::type query;
+		typename MakeValueList<typename RequestMeta::form_params>::type form;
+		typename MakeValueList<typename RequestMeta::header_params>::type headers;
+		typename MakeValueList<typename RequestMeta::body_params>::type body;
+
+		QHash<QByteArray, QByteArray> runtime_headers;
+		int timeout_override_ms = -1;
+
+		auto& withTimeout(int ms) { timeout_override_ms = ms; return *this; }
+		auto& withNoTimeout() { timeout_override_ms = 0; return *this; }
+	};
+
+	template <HttpMethod Method, typename PathStr, typename ResponseType, typename... Params>
+	struct HttpRequest {
+		static constexpr HttpMethod method = Method;
+		static constexpr std::string_view path_view = PathStr::view();
+		static constexpr const char* path_cstr = PathStr::c_str();
+
+		using response_type = ResponseType;
+		using params_type = std::tuple<Params...>;
+
+		using path_params = typename FilterHttpRequestParams<PathTag, Params...>::type;
+		using query_params = typename FilterHttpRequestParams<QueryTag, Params...>::type;
+		using form_params = typename FilterHttpRequestParams<FormTag, Params...>::type;
+		using header_params = typename FilterHttpRequestParams<HeaderTag, Params...>::type;
+		using body_params = typename FilterHttpRequestParams<BodyTag, Params...>::type;
+
+		using instance_type = HttpRequestInstance<HttpRequest>;
+
+		static_assert(!(std::tuple_size_v<body_params> > 0 && std::tuple_size_v<form_params> > 0),
+			"Cannot use Body and Form params at the same time");
+		static_assert(std::tuple_size_v<body_params> <= 1,
+			"Only one Body param is allowed");
+
+		static instance_type make(typename Params::value_type... args)
+		{
+			instance_type inst;
+			detail::fillAll<instance_type, params_type>(
+				inst,
+				std::forward_as_tuple(std::move(args)...),
+				std::index_sequence_for<Params...>{});
+			return inst;
+		}
+	};
+
 }
