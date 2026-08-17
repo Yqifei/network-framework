@@ -129,6 +129,25 @@ static_assert(std::tuple_size_v<GetUser::form_params> == 0, "no form param");
 static_assert(std::tuple_size_v<GetUser::header_params> == 0, "no header param");
 static_assert(std::tuple_size_v<GetUser::body_params> == 0, "no body param");
 
+// ---- 阶段 3.7：HttpMultipartRequest ----
+
+using FileForm = NetCore::Form<STR("file"), NetCore::TypeFile>;
+using NameForm = NetCore::Form<STR("name"), NetCore::TypeString>;
+
+using UploadFile = NetCore::HttpMultipartRequest<
+	NetCore::HttpMethod::POST,
+	STR("api/upload"),
+	UserResponse,
+	FileForm,
+	NameForm>;
+
+static_assert(!NetCore::is_multipart_request_v<GetUser>,
+	"GetUser must not be a multipart request");
+static_assert(NetCore::is_multipart_request_v<UploadFile>,
+	"UploadFile must be a multipart request");
+static_assert(UploadFile::method == NetCore::HttpMethod::POST,
+	"UploadFile method must be POST");
+
 class TestHttpRequest : public QObject
 {
 	Q_OBJECT
@@ -139,6 +158,7 @@ private slots:
 	void fileValueFactories();
 	void paramValueList();
 	void makeFillsInstance();
+	void multipartMake();
 };
 
 void TestHttpRequest::strView()
@@ -189,6 +209,16 @@ void TestHttpRequest::makeFillsInstance()
 
 	req.runtime_headers.insert("X-Request-Id", "abc123");
 	QCOMPARE(req.runtime_headers.value("X-Request-Id"), QByteArray("abc123"));
+}
+
+void TestHttpRequest::multipartMake()
+{
+	auto upload = UploadFile::make(
+		NetCore::FileValue::fromPath(QStringLiteral("a.txt")),
+		"doc");
+
+	QCOMPARE(upload.form.get<FileForm>().filePath, QStringLiteral("a.txt"));
+	QVERIFY((upload.form.get<NameForm>() == "doc"));
 }
 
 QTEST_GUILESS_MAIN(TestHttpRequest)

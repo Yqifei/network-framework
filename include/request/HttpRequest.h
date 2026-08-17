@@ -352,4 +352,34 @@ namespace NetCore {
 		}
 	};
 
+	template <HttpMethod Method, typename PathStr, typename ResponseType, typename... Params>
+	struct HttpMultipartRequest : HttpRequest<Method, PathStr, ResponseType, Params...>
+	{
+		static_assert(Method == HttpMethod::POST || Method == HttpMethod::PUT || Method == HttpMethod::PATCH,
+			"Multipart only support POST/PUT/PATCH");
+
+		using base_t = HttpRequest<Method, PathStr, ResponseType, Params...>;
+		using instance_type = HttpRequestInstance<HttpMultipartRequest>;
+
+		static instance_type make(typename Params::value_type... args)
+		{
+			instance_type inst;
+			detail::fillAll<instance_type, typename base_t::params_type>(
+				inst,
+				std::forward_as_tuple(std::move(args)...),
+				std::index_sequence_for<Params...>{});
+			return inst;
+		}
+	};
+
+	template <typename T, typename = void>
+	struct is_multipart_request : std::false_type {};
+
+	template <HttpMethod M, typename PathStr, typename ResponseType, typename... Params>
+	struct is_multipart_request<HttpMultipartRequest<M, PathStr, ResponseType, Params...>> : std::true_type {};
+
+	template <typename T>
+	constexpr bool is_multipart_request_v = is_multipart_request<T>::value;
+
+
 }
