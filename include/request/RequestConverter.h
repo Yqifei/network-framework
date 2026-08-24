@@ -63,7 +63,23 @@ namespace NetCore {
 						// TypeBinary：原样传递（protobuf 等二进制协议）
 						out_body = pv.value;
 					}
+					else {
+						// 其他（TypeString 等）：转为 UTF-8 字节
+						out_body.append(ValueConverter::toString(pv.value).toUtf8());
+					}
 				});
+			}
+
+			// Form 参数 URL 编码（仅非 multipart 请求）
+			if constexpr (!is_multipart_request_v<RequestMeta>
+				&& std::tuple_size_v<typename RequestMeta::form_params> > 0) {
+				QUrlQuery form_data;
+				forEachHttpRequestParam(request_ins.form.values, [&form_data](auto&& pv) {
+					form_data.addQueryItem(
+						ValueConverter::toString(pv.key),
+						ValueConverter::toString(pv.value));
+				});
+				out_body.append(form_data.toString(QUrl::FullyEncoded).toUtf8());
 			}
 
 			return out_body;
