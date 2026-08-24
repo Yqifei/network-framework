@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QFileInfo>
 #include <QHash>
 #include <QJsonObject>
 #include <QString>
@@ -96,6 +97,7 @@ namespace NetCore {
 		{
 			FileValue value;
 			value.filePath = path;
+			value.fileName = QFileInfo(path).fileName();
 			value.contentType = contentType;
 			return value;
 		}
@@ -240,6 +242,7 @@ namespace NetCore {
 	template <typename Param>
 	struct HttpRequestParamValue {
 		using value_type = typename Param::value_type;
+		using value_tag = typename Param::value_tag;
 		static constexpr std::string_view key = Param::key_view;
 		value_type value{};
 	};

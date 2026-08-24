@@ -1,12 +1,20 @@
 #pragma once
 
+#include <QFile>
+#include <QFileInfo>
+#include <QHttpMultiPart>
+#include <QHttpPart>
+#include <QIODevice>
 #include <QNetworkRequest>
 #include <QString>
 #include <QUrl>
 #include <QUrlQuery>
 #include <cstdint>
+#include <memory>
+#include <stdexcept>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include <request/HttpRequest.h>
@@ -83,6 +91,59 @@ namespace NetCore {
 			}
 
 			return out_body;
+		}
+
+		// multipart/form-data 构建：unique_ptr 保证文件打开失败抛异常时自动释放
+		template <typename RequestMeta>
+		static QHttpMultiPart* buildMultipart(const HttpRequestInstance<RequestMeta>& request_ins)
+		{
+			std::unique_ptr<QHttpMultiPart> mp(new QHttpMultiPart(QHttpMultiPart::FormDataType));
+
+			forEachHttpRequestParam(request_ins.form.values, [raw_mp = mp.get()](auto&& pv) {
+				using PV = std::decay_t<decltype(pv)>;
+				using ValueType = typename PV::value_type;
+				const QByteArray name(pv.key.data(), static_cast<int>(pv.key.size()));
+				QHttpPart part;
+
+				if constexpr (std::is_same_v<ValueType, FileValue>) {
+					const FileValue& fv = pv.value;
+					// 手动构造的 FileValue 可能没填 fileName，从路径兜底
+					const QString filename = fv.fileName.isEmpty()
+						? QFileInfo(fv.filePath).fileName()
+						: fv.fileName;
+
+					part.setHeader(QNetworkRequest::ContentDispositionHeader,
+						"form-data; name=\"" + name + "\"; filename=\"" + filename.toUtf8() + "\"");
+					if (!fv.contentType.isEmpty()) {
+						part.setHeader(QNetworkRequest::ContentTypeHeader, fv.contentType);
+					}
+
+					if (!fv.filePath.isEmpty()) {
+						// QFile 挂 mp 为 parent：mp 销毁时自动关闭并释放
+						auto* file = new QFile(fv.filePath, raw_mp);
+						if (!file->open(QIODevice::ReadOnly)) {
+							throw std::runtime_error(
+								"RequestConverter: cannot open file: " + fv.filePath.toStdString());
+						}
+						part.setBodyDevice(file);
+					} else {
+						part.setBody(fv.data);
+					}
+				}
+				else if constexpr (std::is_same_v<ValueType, QByteArray>) {
+					part.setHeader(QNetworkRequest::ContentDispositionHeader,
+						"form-data; name=\"" + name + "\"");
+					part.setBody(pv.value);
+				}
+				else {
+					part.setHeader(QNetworkRequest::ContentDispositionHeader,
+						"form-data; name=\"" + name + "\"");
+					part.setBody(ValueConverter::toString(pv.value).toUtf8());
+				}
+				raw_mp->append(part);
+			});
+
+			return mp.release();
 		}
 
 		// HttpRequestInstance -> QNetworkRequest

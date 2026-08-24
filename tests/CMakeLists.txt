@@ -9,3 +9,7 @@ add_test(NAME tst_httprequest COMMAND tst_httprequest)
 add_executable(tst_jsonserializer tst_jsonserializer.cpp)
 target_link_libraries(tst_jsonserializer PRIVATE NetCore::NetworkLib Qt5::Test)
 add_test(NAME tst_jsonserializer COMMAND tst_jsonserializer)
+
+add_executable(tst_requestconverter tst_requestconverter.cpp)
+target_link_libraries(tst_requestconverter PRIVATE NetCore::NetworkLib Qt5::Test)
+add_test(NAME tst_requestconverter COMMAND tst_requestconverter)
