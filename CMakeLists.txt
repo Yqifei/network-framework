@@ -17,7 +17,11 @@ add_subdirectory(third_party/qtpromise)
 set(CMAKE_AUTOMOC ON)
 
 add_library(NetworkLib
+    include/client/NetworkClientError.h
+    include/client/NetworkException.h
     include/serializer/JsonSerializer.h
+    src/client/NetworkClientError.cpp
+    src/client/NetworkException.cpp
     src/core/Version.cpp
     src/serializer/SerializerException.cpp
     src/serializer/JsonSerializer.cpp)
