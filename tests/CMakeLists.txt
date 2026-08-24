@@ -17,3 +17,7 @@ add_test(NAME tst_requestconverter COMMAND tst_requestconverter)
 add_executable(tst_networkerror tst_networkerror.cpp)
 target_link_libraries(tst_networkerror PRIVATE NetCore::NetworkLib Qt5::Test)
 add_test(NAME tst_networkerror COMMAND tst_networkerror)
+
+add_executable(tst_lifecycle tst_lifecycle.cpp)
+target_link_libraries(tst_lifecycle PRIVATE NetCore::NetworkLib Qt5::Test)
+add_test(NAME tst_lifecycle COMMAND tst_lifecycle)
