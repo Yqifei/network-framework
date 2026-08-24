@@ -143,6 +143,16 @@ namespace NetCore {
 	template <typename T>
 	struct ValueTypeOf<TypeModel<T>> { using type = T; };
 
+	// ---------- 值类型分类 Trait ----------
+	template <typename T>
+	struct IsModelType : std::false_type {};
+
+	template <typename T>
+	struct IsModelType<TypeModel<T>> : std::true_type {};
+
+	template <typename T>
+	constexpr bool IsModelType_v = IsModelType<T>::value;
+
 	// ---------- NoKeyStr：Body 等无键名参数的占位 KeyStr ----------
 	struct NoKeyStr {
 		static constexpr std::string_view view() { return ""; }

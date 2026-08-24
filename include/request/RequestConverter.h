@@ -1,10 +1,17 @@
 #pragma once
 
+#include <QNetworkRequest>
 #include <QString>
+#include <QUrl>
+#include <QUrlQuery>
 #include <cstdint>
 #include <string_view>
 #include <tuple>
 #include <utility>
+
+#include <request/HttpRequest.h>
+#include <request/RequestAttrCode.h>
+#include <serializer/JsonSerializer.h>
 
 namespace NetCore {
 
@@ -34,6 +41,97 @@ namespace NetCore {
 			std::apply([&](auto &&...param_value) {
 				(fn(param_value), ...);
 				}, std::forward<ParamValueTuple>(param_values));
+		}
+
+		// 请求体构建：按 body 参数的 value_tag 编译期分派序列化策略
+		template <typename RequestMeta>
+		static QByteArray buildBody(const HttpRequestInstance<RequestMeta>& request_ins)
+		{
+			QByteArray out_body;
+
+			// body 参数最多 1 个，HttpRequest 里有 static_assert 保证
+			if constexpr (std::tuple_size_v<typename RequestMeta::body_params> > 0) {
+				forEachHttpRequestParam(request_ins.body.values, [&out_body](auto&& pv) {
+					using PV = std::decay_t<decltype(pv)>;
+
+					if constexpr (IsModelType_v<typename PV::value_tag>) {
+						// TypeModel<T>：走 Qt 元对象反射序列化为 JSON
+						JsonSerializer serializer;
+						out_body = serializer.serializeToBytes(pv.value);
+					}
+					else if constexpr (std::is_same_v<typename PV::value_tag, TypeBinary>) {
+						// TypeBinary：原样传递（protobuf 等二进制协议）
+						out_body = pv.value;
+					}
+				});
+			}
+
+			return out_body;
+		}
+
+		// HttpRequestInstance -> QNetworkRequest
+		template <typename RequestMeta>
+		static QNetworkRequest convertToQNetworkRequest(
+			const QString& base_url,
+			const HttpRequestInstance<RequestMeta>& request_ins)
+		{
+			QNetworkRequest q_request;
+
+			// 路径参数替换：api/users/{id} -> api/users/42
+			QString path = QString::fromUtf8(RequestMeta::path_cstr);
+			forEachHttpRequestParam(request_ins.path.values, [&path](auto&& pv) {
+				const QString key = ValueConverter::toString(pv.key);
+				const QString value = ValueConverter::toString(pv.value);
+				path.replace("{" + key + "}", value);
+			});
+
+			// Query 参数
+			QUrlQuery query;
+			forEachHttpRequestParam(request_ins.query.values, [&query](auto&& pv) {
+				query.addQueryItem(
+					ValueConverter::toString(pv.key),
+					ValueConverter::toString(pv.value));
+			});
+
+			// 组装完整 URL
+			QUrl url(base_url + path);
+			if (!query.isEmpty()) url.setQuery(query);
+			q_request.setUrl(url);
+
+			// 运行时 headers；Authorization 自动加 "Bearer " 前缀
+			for (auto it = request_ins.runtime_headers.cbegin();
+				it != request_ins.runtime_headers.cend(); ++it)
+			{
+				if (it.key() == "Authorization") {
+					q_request.setRawHeader(it.key(), "Bearer " + it.value());
+					continue;
+				}
+				q_request.setRawHeader(it.key(), it.value());
+			}
+
+			// 编译期声明的 Header 参数
+			forEachHttpRequestParam(request_ins.headers.values, [&q_request](auto&& pv) {
+				q_request.setRawHeader(
+					QByteArray(pv.key.data(), static_cast<int>(pv.key.size())),
+					ValueConverter::toString(pv.value).toUtf8());
+			});
+
+			// Body 存入自定义属性；拦截器链只传递 QNetworkRequest
+			auto body = buildBody(request_ins);
+			if (!body.isEmpty()) {
+				q_request.setAttribute(
+					static_cast<QNetworkRequest::Attribute>(kRequestBodyAttrCode),
+					body);
+			}
+
+			// 请求级超时覆盖
+			if (request_ins.timeout_override_ms >= 0) {
+				q_request.setAttribute(
+					static_cast<QNetworkRequest::Attribute>(kRequestTimeoutAttrCode),
+					request_ins.timeout_override_ms);
+			}
+
+			return q_request;
 		}
 	};
 
