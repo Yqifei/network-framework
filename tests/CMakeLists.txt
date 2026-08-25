@@ -21,3 +21,7 @@ add_test(NAME tst_networkerror COMMAND tst_networkerror)
 add_executable(tst_lifecycle tst_lifecycle.cpp)
 target_link_libraries(tst_lifecycle PRIVATE NetCore::NetworkLib Qt5::Test)
 add_test(NAME tst_lifecycle COMMAND tst_lifecycle)
+
+add_executable(tst_interceptor tst_interceptor.cpp)
+target_link_libraries(tst_interceptor PRIVATE NetCore::NetworkLib Qt5::Test)
+add_test(NAME tst_interceptor COMMAND tst_interceptor)
