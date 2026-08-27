@@ -19,15 +19,21 @@ set(CMAKE_AUTOMOC ON)
 add_library(NetworkLib
     include/client/Interceptor.h
     include/client/LifeCycle.h
+    include/client/NetworkClient.h
     include/client/NetworkClientError.h
     include/client/NetworkException.h
+    include/request/HttpSpec.h
     include/serializer/JsonSerializer.h
+    include/service/NetworkService.h
     src/client/Interceptor.cpp
+    src/client/NetworkClient.cpp
     src/client/NetworkClientError.cpp
     src/client/NetworkException.cpp
     src/core/Version.cpp
+    src/request/HttpSpec.cpp
     src/serializer/SerializerException.cpp
-    src/serializer/JsonSerializer.cpp)
+    src/serializer/JsonSerializer.cpp
+    src/service/NetworkService.cpp)
 add_library(NetCore::NetworkLib ALIAS NetworkLib)
 
 target_include_directories(NetworkLib PUBLIC

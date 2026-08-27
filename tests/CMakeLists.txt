@@ -25,3 +25,15 @@ add_test(NAME tst_lifecycle COMMAND tst_lifecycle)
 add_executable(tst_interceptor tst_interceptor.cpp)
 target_link_libraries(tst_interceptor PRIVATE NetCore::NetworkLib Qt5::Test)
 add_test(NAME tst_interceptor COMMAND tst_interceptor)
+
+add_executable(tst_networkclient tst_networkclient.cpp)
+target_link_libraries(tst_networkclient PRIVATE NetCore::NetworkLib Qt5::Test)
+add_test(NAME tst_networkclient COMMAND tst_networkclient)
+
+add_executable(tst_httpspec tst_httpspec.cpp)
+target_link_libraries(tst_httpspec PRIVATE NetCore::NetworkLib Qt5::Test)
+add_test(NAME tst_httpspec COMMAND tst_httpspec)
+
+add_executable(tst_networkservice tst_networkservice.cpp)
+target_link_libraries(tst_networkservice PRIVATE NetCore::NetworkLib Qt5::Test)
+add_test(NAME tst_networkservice COMMAND tst_networkservice)

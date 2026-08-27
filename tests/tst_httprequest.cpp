@@ -148,6 +148,25 @@ static_assert(NetCore::is_multipart_request_v<UploadFile>,
 static_assert(UploadFile::method == NetCore::HttpMethod::POST,
 	"UploadFile method must be POST");
 
+// ---- 编译期约束 ----
+// 下面三种写法应当编不过。没法写成自动化用例（编译失败就没有可执行文件了），
+// 取消注释任意一行即可验证对应的 static_assert 会触发。
+//
+// Body 和 Form 互斥（同一个请求体不可能既是原始数据又是表单）：
+// using BodyAndForm = NetCore::HttpRequest<NetCore::HttpMethod::POST, STR("x"), void,
+//     NetCore::Body<NetCore::TypeString>, NetCore::Form<STR("a")>>;
+// > Cannot use Body and Form params at the same time
+//
+// Body 最多一个：
+// using TwoBodies = NetCore::HttpRequest<NetCore::HttpMethod::POST, STR("x"), void,
+//     NetCore::Body<NetCore::TypeString>, NetCore::Body<NetCore::TypeInt>>;
+// > Only one Body param is allowed
+//
+// multipart 只能用 POST/PUT/PATCH（GET 带 body 没有意义）：
+// using GetMultipart = NetCore::HttpMultipartRequest<NetCore::HttpMethod::GET, STR("x"), void,
+//     NetCore::Form<STR("f"), NetCore::TypeFile>>;
+// > Multipart only support POST/PUT/PATCH
+
 class TestHttpRequest : public QObject
 {
 	Q_OBJECT
