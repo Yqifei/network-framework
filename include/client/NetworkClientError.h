@@ -27,7 +27,7 @@ public:
 	// 静态工厂：唯一创建入口，类型安全
 	static NetworkClientError timeout();
 	static NetworkClientError network(QNetworkReply::NetworkError code, const QString& message);
-	static NetworkClientError http(int status, const QByteArray& rawBody, const QString& message);
+	static NetworkClientError http(int status, const QByteArray& rawBody, const QString& message = {});
 	static NetworkClientError serialization(const QString& message, const QByteArray& rawBody = {});
 	static NetworkClientError logic(int serverCode, const QString& serverMessage);
 

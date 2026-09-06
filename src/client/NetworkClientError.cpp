@@ -26,7 +26,10 @@ NetworkClientError NetworkClientError::network(
 NetworkClientError NetworkClientError::http(
 	int status, const QByteArray& rawBody, const QString& message)
 {
-	return NetworkClientError(Detail(HttpDetail{ status, rawBody }), message);
+	const QString msg = message.isEmpty()
+		? QStringLiteral("HTTP error %1").arg(status)
+		: message;
+	return NetworkClientError(Detail(HttpDetail{ status, rawBody }), msg);
 }
 
 NetworkClientError NetworkClientError::serialization(
