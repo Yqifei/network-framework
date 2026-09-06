@@ -171,7 +171,13 @@ namespace NetCore {
 				value = QVariant(jsonValue.toInt());
 			}
 			else {
-				value = deserializeQVariant(jsonValue, property.userType());
+				QObject* contextParent = isQObject ? static_cast<QObject*>(data) : nullptr;
+				try {
+					value = deserializeQVariant(jsonValue, property.userType(), contextParent);
+				} catch (const DeserializerException& ex) {
+					throw DeserializerException(
+						"Failed to deserialize field '" + key.toUtf8() + "': " + ex.what());
+				}
 			}
 
 			const bool ok = isQObject
@@ -186,8 +192,17 @@ namespace NetCore {
 		}
 	}
 
-	QVariant JsonSerializer::deserializeQVariant(const QJsonValue& value, int typeId) const
+	QVariant JsonSerializer::deserializeQVariant(const QJsonValue& value, int typeId, QObject* contextParent) const
 	{
+		// null / undefined: 返回该类型的默认值，不走后续逻辑
+		if (value.isNull() || value.isUndefined()) {
+			if (m_flags.testFlag(AllowNullForClasses)
+				&& QMetaType::typeFlags(typeId).testFlag(QMetaType::PointerToQObject)) {
+				return QVariant::fromValue<QObject*>(nullptr);
+			}
+			return QVariant(typeId, nullptr);
+		}
+
 		switch (typeId) {
 		case QMetaType::Bool:    return QVariant(value.toBool());
 		case QMetaType::Int:     return QVariant(value.toInt());
@@ -207,11 +222,9 @@ namespace NetCore {
 			if (!metaObject)
 				throw DeserializerException("Cannot determine concrete QObject type for deserialization");
 
-			QObject* object = metaObject->newInstance();
+			QObject* object = metaObject->newInstance(Q_ARG(QObject*, contextParent));
 			if (!object)
 				throw DeserializerException("Failed to create QObject, constructor must be Q_INVOKABLE");
-
-			// 异常安全：填充过程抛出时自动释放，成功后移交所有权
 			std::unique_ptr<QObject> guard(object);
 			deserializeInternal(value.toObject(), metaObject, object);
 			guard.release();
@@ -242,7 +255,7 @@ namespace NetCore {
 			QVariantList list;
 			const QJsonArray array = value.toArray();
 			for (const QJsonValue& item : array)
-				list.append(deserializeQVariant(item, elementTypeId));
+				list.append(deserializeQVariant(item, elementTypeId, contextParent));
 
 			QVariant result = QVariant::fromValue(list);
 			if (!result.convert(typeId)) {

@@ -124,7 +124,7 @@ private:
     QJsonObject serializeInternal(const QMetaObject *metaObject, const void *data) const;
     QJsonValue serializeQVariant(const QVariant &value, int typeId) const;
     void deserializeInternal(const QJsonObject &object, const QMetaObject *metaObject, void *data) const;
-    QVariant deserializeQVariant(const QJsonValue &value, int typeId) const;
+    QVariant deserializeQVariant(const QJsonValue &value, int typeId, QObject *contextParent) const;
 
     SerializerFlags m_flags;
 };
