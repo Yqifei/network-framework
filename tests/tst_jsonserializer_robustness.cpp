@@ -99,6 +99,33 @@ private:
 };
 Q_DECLARE_METATYPE(QList<Note*>)
 
+// 基础类型扩展：bool 容错 + short/float 往返
+class Metrics
+{
+    Q_GADGET
+    Q_PROPERTY(bool enabled READ enabled WRITE setEnabled)
+    Q_PROPERTY(short rank READ rank WRITE setRank)
+    Q_PROPERTY(float score READ score WRITE setScore)
+    Q_PROPERTY(unsigned int views READ views WRITE setViews)
+
+public:
+    bool enabled() const { return m_enabled; }
+    void setEnabled(bool enabled) { m_enabled = enabled; }
+    short rank() const { return m_rank; }
+    void setRank(short rank) { m_rank = rank; }
+    float score() const { return m_score; }
+    void setScore(float score) { m_score = score; }
+    unsigned int views() const { return m_views; }
+    void setViews(unsigned int views) { m_views = views; }
+
+private:
+    bool m_enabled = false;
+    short m_rank = 0;
+    float m_score = 0.0f;
+    unsigned int m_views = 0;
+};
+Q_DECLARE_METATYPE(Metrics)
+
 // ---------- 测试 ----------
 
 class TestJsonSerializerRobustness : public QObject
@@ -114,6 +141,8 @@ private slots:
     void nullFieldsFallBackToDefaults();
     void nullPointerInListAllowed();
     void undefinedFallsBackToDefaults();
+    void boolToleratesAlternativeEncodings();
+    void shortFloatRoundTrip();
 };
 
 void TestJsonSerializerRobustness::initTestCase()
@@ -237,6 +266,54 @@ void TestJsonSerializerRobustness::undefinedFallsBackToDefaults()
     Profile profile = serializer.deserialize<Profile>(object);
     QCOMPARE(profile.age(), 0);
     QVERIFY(profile.address().city().isEmpty());
+}
+
+// bool 容错：服务端用 0/1 或字符串表示布尔值时也能正确解析
+void TestJsonSerializerRobustness::boolToleratesAlternativeEncodings()
+{
+    NetCore::JsonSerializer serializer;
+
+    struct Case {
+        const char *json;
+        bool expected;
+    };
+    const Case cases[] = {
+        { R"({"enabled":true})", true },
+        { R"({"enabled":1})", true },
+        { R"({"enabled":"true"})", true },
+        { R"({"enabled":"1"})", true },
+        { R"({"enabled":"TRUE"})", true },
+        { R"({"enabled":false})", false },
+        { R"({"enabled":0})", false },
+        { R"({"enabled":"false"})", false },
+    };
+
+    for (const Case &c : cases) {
+        Metrics metrics =
+            serializer.deserializeFromBytes<Metrics>(QByteArray(c.json));
+        QCOMPARE(metrics.enabled(), c.expected);
+    }
+}
+
+// short/float/unsigned 属性：序列化往返保持一致
+void TestJsonSerializerRobustness::shortFloatRoundTrip()
+{
+    NetCore::JsonSerializer serializer;
+
+    Metrics metrics;
+    metrics.setEnabled(true);
+    metrics.setRank(7);
+    metrics.setScore(3.5f);
+    metrics.setViews(42);
+
+    const QByteArray bytes = serializer.serializeToBytes(metrics);
+    QVERIFY(bytes.contains("3.5"));   // float 序列化成 JSON 数字，保留小数部分
+
+    Metrics restored = serializer.deserializeFromBytes<Metrics>(bytes);
+    QCOMPARE(restored.enabled(), true);
+    QCOMPARE(restored.rank(), short(7));
+    QCOMPARE(restored.score(), 3.5f);
+    QCOMPARE(restored.views(), 42u);
 }
 
 QTEST_GUILESS_MAIN(TestJsonSerializerRobustness)

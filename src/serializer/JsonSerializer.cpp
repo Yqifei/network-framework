@@ -84,11 +84,23 @@ namespace NetCore {
 	{
 		switch (typeId) {
 		case QMetaType::Bool:      return { value.toBool() };
-		case QMetaType::Int:       return { value.toInt() };
+		case QMetaType::Int:
+		case QMetaType::Short:
+		case QMetaType::SChar:     return { value.toInt() };
+		case QMetaType::UInt:
+		case QMetaType::UShort:
+		case QMetaType::UChar:     return { static_cast<int>(value.toUInt()) };
+		case QMetaType::Long:
+		case QMetaType::LongLong:  return { value.toLongLong() };
+		case QMetaType::ULong:
+		case QMetaType::ULongLong: return { static_cast<qint64>(value.toULongLong()) };
+		case QMetaType::Float:     return { static_cast<double>(value.toFloat()) };
 		case QMetaType::Double:    return { value.toDouble() };
 		case QMetaType::QString:   return { value.toString() };
+		case QMetaType::QByteArray:return { QString::fromUtf8(value.toByteArray()) };
 		case QMetaType::QJsonObject: return { value.toJsonObject() };
 		case QMetaType::QJsonArray:  return { value.toJsonArray() };
+		case QMetaType::QJsonValue:  return { value.toJsonValue() };
 		default: break;
 		}
 
@@ -204,12 +216,46 @@ namespace NetCore {
 		}
 
 		switch (typeId) {
-		case QMetaType::Bool:    return QVariant(value.toBool());
-		case QMetaType::Int:     return QVariant(value.toInt());
-		case QMetaType::Double:  return QVariant(value.toDouble());
-		case QMetaType::QString: return QVariant(value.toString());
-		case QMetaType::QJsonObject: return QVariant(value.toObject());
-		case QMetaType::QJsonArray:  return QVariant(value.toArray());
+		case QMetaType::Bool: {
+			// 容错: 服务端可能返回 0/1 或 "true"/"false" 表示布尔值
+			if (value.isBool()) return QVariant(value.toBool());
+			if (value.isDouble()) return QVariant(value.toDouble() != 0.0);
+			if (value.isString()) {
+				const QString str = value.toString().toLower();
+				return QVariant(str == QLatin1String("true") || str == QLatin1String("1"));
+			}
+			return QVariant(value.toBool());
+		}
+		case QMetaType::Int:
+		case QMetaType::Short:
+		case QMetaType::SChar:
+			return QVariant::fromValue<int>(value.toInt());
+		case QMetaType::UInt:
+		case QMetaType::UShort:
+		case QMetaType::UChar:
+			return QVariant::fromValue<unsigned int>(static_cast<unsigned int>(value.toDouble()));
+		case QMetaType::Long:
+		case QMetaType::LongLong:
+			return QVariant::fromValue<qlonglong>(static_cast<qlonglong>(value.toDouble()));
+		case QMetaType::ULong:
+		case QMetaType::ULongLong:
+			return QVariant::fromValue<qulonglong>(static_cast<qulonglong>(value.toDouble()));
+		case QMetaType::Float:
+			return QVariant::fromValue<float>(static_cast<float>(value.toDouble()));
+		case QMetaType::Double:
+			return QVariant(value.toDouble());
+		case QMetaType::QString:
+			// 容错: 数值类型也能转成 QString
+			if (value.isString()) return QVariant(value.toString());
+			return QVariant(value.toVariant().toString());
+		case QMetaType::QByteArray:
+			return QVariant(value.toString().toUtf8());
+		case QMetaType::QJsonObject:
+			return QVariant(value.toObject());
+		case QMetaType::QJsonArray:
+			return QVariant(value.toArray());
+		case QMetaType::QJsonValue:
+			return QVariant::fromValue(value);
 		default: break;
 		}
 
