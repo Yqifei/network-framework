@@ -16,27 +16,47 @@ RetryInterceptor::Policy::Policy()
 		if (e.isTimeout()) return true;
 
 		if (const auto net = e.asNetwork()) {
+			// 黑名单: 明确不可能通过重试恢复的永久性错误
 			static const QSet<QNetworkReply::NetworkError> kPermanent = {
-				QNetworkReply::OperationCanceledError,
-				QNetworkReply::SslHandshakeFailedError,
-				QNetworkReply::AuthenticationRequiredError,
-				QNetworkReply::ProxyAuthenticationRequiredError,
-				QNetworkReply::ContentAccessDenied,
-				QNetworkReply::ContentOperationNotPermittedError,
-				QNetworkReply::ContentNotFoundError,
-				QNetworkReply::ContentGoneError,
-				QNetworkReply::ContentConflictError,
-				QNetworkReply::ProtocolUnknownError,
-				QNetworkReply::ProtocolInvalidOperationError,
-				QNetworkReply::OperationNotImplementedError,
+				QNetworkReply::OperationCanceledError,          // 代码/用户主动取消，不应悄悄重试
+				QNetworkReply::SslHandshakeFailedError,         // TLS/证书配置问题，重试必然失败
+				QNetworkReply::BackgroundRequestNotAllowedError, // 系统省电/流量策略拒绝，重试被同样拒绝
+				QNetworkReply::TooManyRedirectsError,            // 重定向循环，重试只会继续循环
+				QNetworkReply::InsecureRedirectError,            // 安全策略阻止 https->http 降级
+				QNetworkReply::ProxyAuthenticationRequiredError, // 代理需要凭证，需人工介入
+				QNetworkReply::AuthenticationRequiredError,      // 401, 需要重新鉴权，重试继续 401
+				QNetworkReply::ContentAccessDenied,              // 403, 权限永久拒绝
+				QNetworkReply::ContentOperationNotPermittedError,// 操作不被允许(永久性)
+				QNetworkReply::ContentNotFoundError,             // 404, 资源不存在
+				QNetworkReply::ContentGoneError,                  // 410, 资源已永久删除
+				QNetworkReply::ContentConflictError,              // 409, 业务冲突，重试同样冲突
+				QNetworkReply::ProtocolUnknownError,              // 协议级别不兼容
+				QNetworkReply::ProtocolInvalidOperationError,    // 协议操作非法
+				QNetworkReply::ProtocolFailure,                  // 协议层根本性错误
+				QNetworkReply::OperationNotImplementedError,      // 501, 服务端不支持此操作
 			};
+			// 其余一律重试: 包括 HostNotFound/NetworkSessionFailed/Unknown 等瞬时性错误
 			return !kPermanent.contains(net->code);
 		}
 
 		if (const auto http = e.asHttp()) {
+			// 黑名单: 4xx 客户端错误 (除 429 限流) 永久性，重试必然失败
 			// 429 不在内，限流本来就该等一会儿再试
 			static const QSet<int> kPermanentHttp = {
-				400, 401, 403, 404, 405, 406, 409, 410, 413, 414, 415, 422, 501
+				400, // Bad Request - 请求格式错误
+				401, // Unauthorized - 需要鉴权
+				403, // Forbidden - 权限不足
+				404, // Not Found - 资源不存在
+				405, // Method Not Allowed - HTTP 方法不被接受
+				406, // Not Acceptable - 无法满足 Accept 头
+				409, // Conflict - 业务冲突
+				410, // Gone - 资源已永久删除
+				411, // Length Required - 缺少 Content-Length
+				413, // Payload Too Large - 请求体超限
+				414, // URI Too Long - URL 超长
+				415, // Unsupported Media Type - Content-Type 不支持
+				422, // Unprocessable Entity - 语义错误
+				501, // Not Implemented - 服务端不支持
 			};
 			return !kPermanentHttp.contains(http->status);
 		}
