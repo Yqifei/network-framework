@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <serializer/JsonSerializer.h>
@@ -126,6 +127,53 @@ private:
 };
 Q_DECLARE_METATYPE(Metrics)
 
+// 自定义类型：注册 double 转换，走兜底分支序列化成 JSON 数字
+class Score
+{
+public:
+    Score() = default;
+    explicit Score(double value) : m_value(value) {}
+
+    double value() const { return m_value; }
+
+private:
+    double m_value = 0.0;
+};
+Q_DECLARE_METATYPE(Score)
+
+// 自定义类型：只注册 QString 转换，走兜底分支序列化成 JSON 字符串
+class Label
+{
+public:
+    Label() = default;
+    explicit Label(const QString &text) : m_text(text) {}
+
+    QString text() const { return m_text; }
+
+private:
+    QString m_text;
+};
+Q_DECLARE_METATYPE(Label)
+
+// 属性里直接放自定义类型，验证序列化兜底
+class FallbackModel
+{
+    Q_GADGET
+    Q_PROPERTY(Score score READ score WRITE setScore)
+    Q_PROPERTY(Label label READ label WRITE setLabel)
+
+public:
+    Score score() const { return m_score; }
+    void setScore(const Score &score) { m_score = score; }
+    Label label() const { return m_label; }
+    void setLabel(const Label &label) { m_label = label; }
+
+private:
+    Score m_score;
+    Label m_label;
+};
+Q_DECLARE_METATYPE(FallbackModel)
+
 // ---------- 测试 ----------
 
 class TestJsonSerializerRobustness : public QObject
@@ -143,6 +191,7 @@ private slots:
     void undefinedFallsBackToDefaults();
     void boolToleratesAlternativeEncodings();
     void shortFloatRoundTrip();
+    void fallbackSerializesCustomTypes();
 };
 
 void TestJsonSerializerRobustness::initTestCase()
@@ -150,6 +199,8 @@ void TestJsonSerializerRobustness::initTestCase()
     qRegisterMetaType<Addr>();
     qRegisterMetaType<Geo>();
     qRegisterMetaType<QList<Note*>>();
+    qRegisterMetaType<Score>();
+    qRegisterMetaType<Label>();
 
     QMetaType::registerConverter<QVariantList, QList<Addr>>(
         [](const QVariantList &list) {
@@ -167,6 +218,8 @@ void TestJsonSerializerRobustness::initTestCase()
                 result.append(item.value<Note*>());
             return result;
         });
+    QMetaType::registerConverter<Score, double>([](const Score &s) { return s.value(); });
+    QMetaType::registerConverter<Label, QString>([](const Label &l) { return l.text(); });
 }
 
 // 嵌套 QObject 创建时即入树：parent 是外层对象，外层销毁自动级联释放
@@ -314,6 +367,21 @@ void TestJsonSerializerRobustness::shortFloatRoundTrip()
     QCOMPARE(restored.rank(), short(7));
     QCOMPARE(restored.score(), 3.5f);
     QCOMPARE(restored.views(), 42u);
+}
+
+// 兜底分支：已注册转换的自定义类型不再抛异常，数值转 number、其余转 string
+void TestJsonSerializerRobustness::fallbackSerializesCustomTypes()
+{
+    NetCore::JsonSerializer serializer;
+
+    FallbackModel model;
+    model.setScore(Score(4.5));
+    model.setLabel(Label(QStringLiteral("high")));
+
+    const QByteArray bytes = serializer.serializeToBytes(model);
+    const QJsonObject root = QJsonDocument::fromJson(bytes).object();
+    QCOMPARE(root.value(QStringLiteral("score")).toDouble(), 4.5);
+    QCOMPARE(root.value(QStringLiteral("label")).toString(), QStringLiteral("high"));
 }
 
 QTEST_GUILESS_MAIN(TestJsonSerializerRobustness)

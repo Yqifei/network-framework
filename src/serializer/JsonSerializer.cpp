@@ -133,6 +133,11 @@ namespace NetCore {
 			return QJsonValue(array);
 		}
 
+		// 兜底: 对于其他 QMetaType 注册的类型，优先尝试数值再尝试字符串
+		QVariant v = value;
+		if (v.canConvert(QMetaType::Double)) return { v.toDouble() };
+		if (v.canConvert(QMetaType::QString)) return { v.toString() };
+
 		throw SerializerException("Unsupported property type: " + typeName);
 	}
 
