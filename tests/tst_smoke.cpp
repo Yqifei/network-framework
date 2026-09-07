@@ -1,6 +1,6 @@
 #include <QtPromise>
 #include <QtTest>
-#include <nf/version.h>
+#include <core/Version.h>
 
 class TestSmoke : public QObject
 {
@@ -13,8 +13,8 @@ private slots:
 
 void TestSmoke::version()
 {
-    QCOMPARE(QString::fromLatin1(nf::versionString()), QStringLiteral("0.1.0"));
-    QCOMPARE(nf::versionMajor(), 0);
+    QCOMPARE(QString::fromLatin1(NetCore::versionString()), QStringLiteral("0.1.0"));
+    QCOMPARE(NetCore::versionMajor(), 0);
 }
 
 void TestSmoke::qtpromiseWorks()
